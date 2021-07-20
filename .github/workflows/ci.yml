@@ -1,0 +1,52 @@
+on: [push, pull_request]
+
+name: CI
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ${{ matrix.target }}
+    strategy:
+      matrix:
+        rust:
+          - stable
+          - 1.51
+        target:
+          - ubuntu-latest
+          - windows-latest
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          override: true
+
+      - name: cargo test
+        run: cargo test
+
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - 1.51
+          - nightly
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          target: wasm32-wasi
+          override: true
+
+      - name: cargo check
+        run: cargo check

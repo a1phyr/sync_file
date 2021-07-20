@@ -1,0 +1,13 @@
+[package]
+name = "sync_file"
+version = "0.1.0"
+edition = "2018"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+description = "Files that can be read concurrently"
+
+repository = "https://github.com/a1phyr/sync_file"
+documentation = "https://docs.rs/sync_file"
+
+categories = ["concurrency", "filesystem"]
+keywords = ["file", "sync", "concurrency"]
