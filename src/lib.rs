@@ -211,12 +211,18 @@ impl io::Seek for SyncFile {
         self.offset = match pos {
             io::SeekFrom::Start(p) => p,
             io::SeekFrom::Current(p) => {
-                let offset = self.offset as i64 + p;
-                if offset >= 0 {
-                    offset as u64
+                let res = if p >= 0 {
+                    self.offset.checked_add(p as u64)
                 } else {
-                    Err(io::ErrorKind::InvalidInput)?
-                }
+                    self.offset.checked_sub(p.unsigned_abs())
+                };
+
+                res.ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "invalid seek to a negative or overflowing position",
+                    )
+                })?
             }
             io::SeekFrom::End(_) => self.with_file(|mut f| f.seek(pos))?,
         };
