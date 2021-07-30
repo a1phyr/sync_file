@@ -315,3 +315,21 @@ impl FromRawHandle for SyncFile {
         Self::from(File::from_raw_handle(handle))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::prelude::*;
+
+    #[test]
+    fn smoke_test() {
+        let mut f = SyncFile::open("LICENSE-APACHE").unwrap();
+        let mut buf = [0; 9];
+        f.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, b"Copyright");
+        assert_eq!(f.stream_position().unwrap(), 9);
+        assert_eq!(f.seek(io::SeekFrom::Current(-2)).unwrap(), 7);
+        f.read_exact(&mut buf[..2]).unwrap();
+        assert_eq!(&buf[..2], b"ht");
+    }
+}
