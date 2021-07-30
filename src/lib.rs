@@ -178,7 +178,7 @@ impl SyncFile {
 
 impl io::Read for SyncFile {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        #[cfg(any(unix, all(target_os = "wasi", wasi_ext)))]
+        #[cfg(any(unix, wasi_ext))]
         {
             let read = self.file.read_at(buf, self.offset)?;
             self.offset += read as u64;
@@ -238,7 +238,7 @@ impl io::Seek for SyncFile {
 
 impl io::Write for SyncFile {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        #[cfg(any(unix, all(target_os = "wasi", wasi_ext)))]
+        #[cfg(any(unix, wasi_ext))]
         {
             let written = self.file.write_at(buf, self.offset)?;
             self.offset += written as u64;
