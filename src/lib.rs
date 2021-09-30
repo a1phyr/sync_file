@@ -9,6 +9,8 @@
 //! writing concurrently at the same position in a file can still result in race
 //! conditions, but only on the content, not the position.
 //!
+//! This library also exposes platform-independant fonctions for positional I/O.
+//!
 //! # Example
 //!
 //! ```
@@ -174,34 +176,146 @@ impl SyncFile {
     pub fn set_permissions(&self, perm: fs::Permissions) -> io::Result<()> {
         self.with_file(|f| f.set_permissions(perm))
     }
-}
 
-impl io::Read for SyncFile {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    /// Reads a number of bytes starting from a given offset.
+    ///
+    /// Returns the number of bytes read.
+    ///
+    /// The offset is relative to the start of the file and thus independent
+    /// from the current cursor.
+    ///
+    /// The current file cursor is not affected by this function.
+    pub fn read_at(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
         #[cfg(any(unix, wasi_ext))]
         {
-            let read = self.file.read_at(buf, self.offset)?;
-            self.offset += read as u64;
-            Ok(read)
+            self.file.read_at(buf, offset)
         }
 
         #[cfg(target_os = "windows")]
         {
-            let read = self.file.seek_read(buf, self.offset)?;
-            self.offset += read as u64;
-            Ok(read)
+            self.file.seek_read(buf, offset)
         }
 
         #[cfg(not(any(unix, target_os = "windows", wasi_ext)))]
         {
-            use io::Seek;
+            use io::{Read, Seek};
 
             let file = &mut *self.file.lock().unwrap_or_else(PoisonError::into_inner);
-            file.seek(io::SeekFrom::Start(self.offset))?;
-            let read = file.read(buf)?;
-            self.offset += read as u64;
-            Ok(read)
+            file.seek(io::SeekFrom::Start(offset))?;
+            file.read(buf)
         }
+    }
+
+    /// Reads the exact number of byte required to fill buf from the given
+    /// offset.
+    ///
+    /// The offset is relative to the start of the file and thus independent
+    /// from the current cursor.
+    ///
+    /// The current file cursor is not affected by this function.
+    ///
+    /// # Errors
+    ///
+    /// If this function encounters an error of the kind
+    /// [`io::ErrorKind::Interrupted`] then the error is ignored and the
+    /// operation will continue.
+    ///
+    /// If this function encounters an “end of file” before completely filling
+    /// the buffer, it returns an error of the kind
+    /// [`io::ErrorKind::UnexpectedEof`]. The contents of buf are unspecified
+    /// in this case.
+    ///
+    /// If any other read error is encountered then this function immediately
+    /// returns. The contents of buf are unspecified in this case.
+    pub fn read_exact_at(&self, mut buf: &mut [u8], mut offset: u64) -> io::Result<()> {
+        while !buf.is_empty() {
+            match self.read_at(buf, offset) {
+                Ok(0) => break,
+                Ok(n) => {
+                    let tmp = buf;
+                    buf = &mut tmp[n..];
+                    offset += n as u64;
+                }
+                Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
+                Err(e) => return Err(e),
+            }
+        }
+        if !buf.is_empty() {
+            Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "failed to fill whole buffer",
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Writes a number of bytes starting from a given offset.
+    ///
+    /// Returns the number of bytes written.
+    ///
+    /// The offset is relative to the start of the file and thus independent from the current cursor.
+    ///
+    /// The current file cursor is not affected by this function.
+    pub fn write_at(&self, buf: &[u8], offset: u64) -> io::Result<usize> {
+        #[cfg(any(unix, wasi_ext))]
+        {
+            self.file.write_at(buf, offset)
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            self.file.seek_write(buf, offset)
+        }
+
+        #[cfg(not(any(unix, target_os = "windows", wasi_ext)))]
+        {
+            use io::{Seek, Write};
+
+            let file = &mut *self.file.lock().unwrap_or_else(PoisonError::into_inner);
+            file.seek(io::SeekFrom::Start(offset))?;
+            file.write(buf)
+        }
+    }
+
+    /// Attempts to write an entire buffer starting from a given offset.
+    ///
+    /// The offset is relative to the start of the file and thus independent
+    /// from the current cursor.
+    ///
+    /// The current file cursor is not affected by this function.
+    ///
+    /// # Errors
+    ///
+    /// This function will return the first error of
+    /// non-[`io::ErrorKind::Interrupted`] kind that write_at returns.
+    pub fn write_all_at(&self, mut buf: &[u8], mut offset: u64) -> io::Result<()> {
+        while !buf.is_empty() {
+            match self.write_at(buf, offset) {
+                Ok(0) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::WriteZero,
+                        "failed to write whole buffer",
+                    ));
+                }
+                Ok(n) => {
+                    buf = &buf[n..];
+                    offset += n as u64
+                }
+                Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(())
+    }
+}
+
+impl io::Read for SyncFile {
+    #[inline]
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let read = self.read_at(buf, self.offset)?;
+        self.offset += read as u64;
+        Ok(read)
     }
 }
 
@@ -237,31 +351,11 @@ impl io::Seek for SyncFile {
 }
 
 impl io::Write for SyncFile {
+    #[inline]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        #[cfg(any(unix, wasi_ext))]
-        {
-            let written = self.file.write_at(buf, self.offset)?;
-            self.offset += written as u64;
-            Ok(written)
-        }
-
-        #[cfg(target_os = "windows")]
-        {
-            let written = self.file.seek_write(buf, self.offset)?;
-            self.offset += written as u64;
-            Ok(written)
-        }
-
-        #[cfg(not(any(unix, target_os = "windows", wasi_ext)))]
-        {
-            use io::Seek;
-
-            let file = &mut *self.file.lock().unwrap_or_else(PoisonError::into_inner);
-            file.seek(io::SeekFrom::Start(self.offset))?;
-            let written = file.write(buf)?;
-            self.offset += written as u64;
-            Ok(written)
-        }
+        let written = self.write_at(buf, self.offset)?;
+        self.offset += written as u64;
+        Ok(written)
     }
 
     #[inline]
