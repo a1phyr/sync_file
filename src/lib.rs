@@ -15,8 +15,11 @@
 //!
 //! ```
 //! use std::io::Read;
-//! # use std::io::Write;
 //! use sync_file::SyncFile;
+//! # use std::io::Write;
+//! # let mut f = SyncFile::create("hello.txt")?;
+//! # f.write_all(b"Hello World!\n")?;
+//! # drop(f);
 //!
 //! /// Reads a file byte by byte.
 //! /// Don't do this in real code !
@@ -30,9 +33,6 @@
 //!
 //!     Ok(result)
 //! }
-//! # let mut f = SyncFile::create("hello.txt")?;
-//! # f.write_all(b"Hello World!\n")?;
-//! # drop(f);
 //!
 //! // Open a file
 //! let f = SyncFile::open("hello.txt")?;
@@ -64,119 +64,16 @@
 #![cfg_attr(wasi_ext, feature(wasi_ext))]
 #![warn(missing_docs)]
 
-#[cfg(not(any(unix, target_os = "windows", wasi_ext)))]
-use std::sync::{Mutex, PoisonError};
+mod file;
+pub use file::{PositionalFile, SyncFile};
 
-use std::{
-    fs::{self, File},
-    io,
-    path::Path,
-    sync::Arc,
-};
+use std::{cmp::min, convert::TryInto, io};
 
-#[cfg(unix)]
-use std::os::unix::prelude::*;
-
-#[cfg(target_os = "windows")]
-use std::os::windows::prelude::*;
-
-#[cfg(wasi_ext)]
-use std::os::wasi::prelude::*;
-
-#[cfg(any(unix, target_os = "windows", wasi_ext))]
-type FileRepr = Arc<File>;
-
-// If no platform-specific extension is available, we use a mutex to make sure
-// operations are atomic.
-#[cfg(not(any(unix, target_os = "windows", wasi_ext)))]
-type FileRepr = Arc<Mutex<File>>;
-
-/// A file wrapper that is safe to use concurrently.
+/// The `ReadAt` trait allows for reading bytes from a source at a given offset.
 ///
-/// This wrapper exists because [`std::fs::File`] uses a single cursor, so
-/// reading from a file concurrently will likely produce race conditions.
-///
-/// `SyncFile`s are cheap to clone and clones use distinct cursors, so they can
-/// be used concurrently without issues.
-#[derive(Clone, Debug)]
-pub struct SyncFile {
-    file: FileRepr,
-    offset: u64,
-}
-
-impl SyncFile {
-    /// Attempts to open a file in read-only mode.
-    ///
-    /// See [`File::open`] for details.
-    #[inline]
-    pub fn open<P: AsRef<Path>>(path: P) -> io::Result<SyncFile> {
-        let f = File::open(path.as_ref())?;
-        Ok(SyncFile::from(f))
-    }
-
-    /// Opens a file in write-only mode.
-    ///
-    /// See [`File::create`] for details.
-    pub fn create<P: AsRef<Path>>(path: P) -> io::Result<SyncFile> {
-        let f = File::create(path.as_ref())?;
-        Ok(SyncFile::from(f))
-    }
-
-    #[inline]
-    fn with_file<T>(&self, f: impl FnOnce(&File) -> T) -> T {
-        #[cfg(any(unix, target_os = "windows", wasi_ext))]
-        {
-            f(&self.file)
-        }
-
-        #[cfg(not(any(unix, target_os = "windows", wasi_ext)))]
-        {
-            f(&self.file.lock().unwrap_or_else(PoisonError::into_inner))
-        }
-    }
-
-    /// Attempts to sync all OS-internal metadata to disk.
-    ///
-    /// See [`File::sync_all`] for details.
-    #[inline]
-    pub fn sync_all(&self) -> io::Result<()> {
-        self.with_file(|f| f.sync_all())
-    }
-
-    /// This function is similar to `sync_all`, except that it may not
-    /// synchronize file metadata to the filesystem.
-    ///
-    /// See [`File::sync_data`] for details.
-    #[inline]
-    pub fn sync_data(&self) -> io::Result<()> {
-        self.with_file(|f| f.sync_data())
-    }
-
-    /// Truncates or extends the underlying file, updating the size of this file
-    /// to become `size`.
-    ///
-    /// See [`File::set_len`] for details.
-    #[inline]
-    pub fn set_len(&self, size: u64) -> io::Result<()> {
-        self.with_file(|f| f.set_len(size))
-    }
-
-    /// Queries metadata about the underlying file.
-    ///
-    /// See [`File::metadata`] for details.
-    #[inline]
-    pub fn metadata(&self) -> io::Result<fs::Metadata> {
-        self.with_file(|f| f.metadata())
-    }
-
-    /// Changes the permissions on the underlying file.
-    ///
-    /// See [`File::set_permissions`] for details.
-    #[inline]
-    pub fn set_permissions(&self, perm: fs::Permissions) -> io::Result<()> {
-        self.with_file(|f| f.set_permissions(perm))
-    }
-
+/// Additionally, the methods of this trait only require a shared reference,
+/// which makes it ideal for parallel use.
+pub trait ReadAt {
     /// Reads a number of bytes starting from a given offset.
     ///
     /// Returns the number of bytes read.
@@ -185,26 +82,10 @@ impl SyncFile {
     /// from the current cursor.
     ///
     /// The current file cursor is not affected by this function.
-    pub fn read_at(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
-        #[cfg(any(unix, wasi_ext))]
-        {
-            self.file.read_at(buf, offset)
-        }
-
-        #[cfg(target_os = "windows")]
-        {
-            self.file.seek_read(buf, offset)
-        }
-
-        #[cfg(not(any(unix, target_os = "windows", wasi_ext)))]
-        {
-            use io::{Read, Seek};
-
-            let file = &mut *self.file.lock().unwrap_or_else(PoisonError::into_inner);
-            file.seek(io::SeekFrom::Start(offset))?;
-            file.read(buf)
-        }
-    }
+    ///
+    /// Note that similar to [`io::Read::read`], it is not an error to return with
+    /// a short read.
+    fn read_at(&self, buf: &mut [u8], offset: u64) -> io::Result<usize>;
 
     /// Reads the exact number of byte required to fill buf from the given
     /// offset.
@@ -227,7 +108,7 @@ impl SyncFile {
     ///
     /// If any other read error is encountered then this function immediately
     /// returns. The contents of buf are unspecified in this case.
-    pub fn read_exact_at(&self, mut buf: &mut [u8], mut offset: u64) -> io::Result<()> {
+    fn read_exact_at(&self, mut buf: &mut [u8], mut offset: u64) -> io::Result<()> {
         while !buf.is_empty() {
             match self.read_at(buf, offset) {
                 Ok(0) => break,
@@ -241,15 +122,168 @@ impl SyncFile {
             }
         }
         if !buf.is_empty() {
-            Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "failed to fill whole buffer",
-            ))
+            Err(fill_buffer_error())
         } else {
             Ok(())
         }
     }
+}
 
+impl ReadAt for [u8] {
+    #[inline]
+    fn read_at(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
+        let read = (|| {
+            let offset = offset.try_into().ok()?;
+            let this = self.get(offset..)?;
+            let len = min(this.len(), buf.len());
+
+            buf[..len].copy_from_slice(&this[..len]);
+            Some(len)
+        })();
+
+        Ok(read.unwrap_or(0))
+    }
+
+    #[inline]
+    fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
+        (|| {
+            let offset = offset.try_into().ok()?;
+            let this = self.get(offset..)?;
+            let len = buf.len();
+            (this.len() >= len).then(|| buf.copy_from_slice(&this[..len]))
+        })()
+        .ok_or_else(fill_buffer_error)
+    }
+}
+
+impl<const N: usize> ReadAt for [u8; N] {
+    #[inline]
+    fn read_at(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
+        self.as_ref().read_at(buf, offset)
+    }
+
+    #[inline]
+    fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
+        self.as_ref().read_exact_at(buf, offset)
+    }
+}
+
+impl ReadAt for Vec<u8> {
+    #[inline]
+    fn read_at(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
+        (**self).read_at(buf, offset)
+    }
+
+    #[inline]
+    fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
+        (**self).read_exact_at(buf, offset)
+    }
+}
+
+impl ReadAt for std::borrow::Cow<'_, [u8]> {
+    #[inline]
+    fn read_at(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
+        (**self).read_at(buf, offset)
+    }
+
+    #[inline]
+    fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
+        (**self).read_exact_at(buf, offset)
+    }
+}
+
+impl<R> ReadAt for &R
+where
+    R: ReadAt + ?Sized,
+{
+    #[inline]
+    fn read_at(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
+        (**self).read_at(buf, offset)
+    }
+
+    #[inline]
+    fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
+        (**self).read_exact_at(buf, offset)
+    }
+}
+
+impl<R> ReadAt for Box<R>
+where
+    R: ReadAt + ?Sized,
+{
+    #[inline]
+    fn read_at(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
+        (**self).read_at(buf, offset)
+    }
+
+    #[inline]
+    fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
+        (**self).read_exact_at(buf, offset)
+    }
+}
+
+impl<R> ReadAt for std::sync::Arc<R>
+where
+    R: ReadAt + ?Sized,
+{
+    #[inline]
+    fn read_at(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
+        (**self).read_at(buf, offset)
+    }
+
+    #[inline]
+    fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
+        (**self).read_exact_at(buf, offset)
+    }
+}
+
+impl<R> ReadAt for std::rc::Rc<R>
+where
+    R: ReadAt + ?Sized,
+{
+    #[inline]
+    fn read_at(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
+        (**self).read_at(buf, offset)
+    }
+
+    #[inline]
+    fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
+        (**self).read_exact_at(buf, offset)
+    }
+}
+
+impl<T> ReadAt for io::Cursor<T>
+where
+    T: AsRef<[u8]>,
+{
+    #[inline]
+    fn read_at(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
+        self.get_ref().as_ref().read_at(buf, offset)
+    }
+
+    #[inline]
+    fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
+        self.get_ref().as_ref().read_exact_at(buf, offset)
+    }
+}
+
+impl ReadAt for io::Empty {
+    #[inline]
+    fn read_at(&self, _buf: &mut [u8], _offset: u64) -> io::Result<usize> {
+        Ok(0)
+    }
+
+    #[inline]
+    fn read_exact_at(&self, _buf: &mut [u8], _offset: u64) -> io::Result<()> {
+        Err(fill_buffer_error())
+    }
+}
+
+/// The `WriteAt` trait allows for writing bytes to a source at a given offset.
+///
+/// Additionally, the methods of this trait only require a shared reference,
+/// which makes it ideal for parallel use.
+pub trait WriteAt {
     /// Writes a number of bytes starting from a given offset.
     ///
     /// Returns the number of bytes written.
@@ -257,26 +291,10 @@ impl SyncFile {
     /// The offset is relative to the start of the file and thus independent from the current cursor.
     ///
     /// The current file cursor is not affected by this function.
-    pub fn write_at(&self, buf: &[u8], offset: u64) -> io::Result<usize> {
-        #[cfg(any(unix, wasi_ext))]
-        {
-            self.file.write_at(buf, offset)
-        }
-
-        #[cfg(target_os = "windows")]
-        {
-            self.file.seek_write(buf, offset)
-        }
-
-        #[cfg(not(any(unix, target_os = "windows", wasi_ext)))]
-        {
-            use io::{Seek, Write};
-
-            let file = &mut *self.file.lock().unwrap_or_else(PoisonError::into_inner);
-            file.seek(io::SeekFrom::Start(offset))?;
-            file.write(buf)
-        }
-    }
+    ///
+    /// Note that similar to [`io::Write::write`], it is not an error to return a
+    /// short write.
+    fn write_at(&self, buf: &[u8], offset: u64) -> io::Result<usize>;
 
     /// Attempts to write an entire buffer starting from a given offset.
     ///
@@ -289,14 +307,11 @@ impl SyncFile {
     ///
     /// This function will return the first error of
     /// non-[`io::ErrorKind::Interrupted`] kind that write_at returns.
-    pub fn write_all_at(&self, mut buf: &[u8], mut offset: u64) -> io::Result<()> {
+    fn write_all_at(&self, mut buf: &[u8], mut offset: u64) -> io::Result<()> {
         while !buf.is_empty() {
             match self.write_at(buf, offset) {
                 Ok(0) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::WriteZero,
-                        "failed to write whole buffer",
-                    ));
+                    return Err(write_buffer_error());
                 }
                 Ok(n) => {
                     buf = &buf[n..];
@@ -310,104 +325,86 @@ impl SyncFile {
     }
 }
 
-impl io::Read for SyncFile {
+impl<W> WriteAt for &W
+where
+    W: WriteAt + ?Sized,
+{
     #[inline]
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let read = self.read_at(buf, self.offset)?;
-        self.offset += read as u64;
-        Ok(read)
+    fn write_at(&self, buf: &[u8], offset: u64) -> io::Result<usize> {
+        (**self).write_at(buf, offset)
+    }
+
+    #[inline]
+    fn write_all_at(&self, buf: &[u8], offset: u64) -> io::Result<()> {
+        (**self).write_all_at(buf, offset)
     }
 }
 
-impl io::Seek for SyncFile {
+impl<W> WriteAt for Box<W>
+where
+    W: WriteAt + ?Sized,
+{
     #[inline]
-    fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
-        self.offset = match pos {
-            io::SeekFrom::Start(p) => p,
-            io::SeekFrom::Current(p) => {
-                let res = if p >= 0 {
-                    self.offset.checked_add(p as u64)
-                } else {
-                    self.offset.checked_sub(p.unsigned_abs())
-                };
-
-                res.ok_or_else(|| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "invalid seek to a negative or overflowing position",
-                    )
-                })?
-            }
-            io::SeekFrom::End(_) => self.with_file(|mut f| f.seek(pos))?,
-        };
-
-        Ok(self.offset)
+    fn write_at(&self, buf: &[u8], offset: u64) -> io::Result<usize> {
+        (**self).write_at(buf, offset)
     }
 
     #[inline]
-    fn stream_position(&mut self) -> io::Result<u64> {
-        Ok(self.offset)
+    fn write_all_at(&self, buf: &[u8], offset: u64) -> io::Result<()> {
+        (**self).write_all_at(buf, offset)
     }
 }
 
-impl io::Write for SyncFile {
+impl<W> WriteAt for std::sync::Arc<W>
+where
+    W: WriteAt + ?Sized,
+{
     #[inline]
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let written = self.write_at(buf, self.offset)?;
-        self.offset += written as u64;
-        Ok(written)
+    fn write_at(&self, buf: &[u8], offset: u64) -> io::Result<usize> {
+        (**self).write_at(buf, offset)
     }
 
     #[inline]
-    fn flush(&mut self) -> io::Result<()> {
-        self.with_file(|mut f| f.flush())
-    }
-}
-
-impl From<File> for SyncFile {
-    /// Creates a new `SyncFile` from an open [`File`].
-    #[inline]
-    fn from(file: File) -> SyncFile {
-        #[cfg(any(unix, target_os = "windows", wasi_ext))]
-        let file = Arc::new(file);
-
-        #[cfg(not(any(unix, target_os = "windows", wasi_ext)))]
-        let file = Arc::new(Mutex::new(file));
-
-        SyncFile { file, offset: 0 }
+    fn write_all_at(&self, buf: &[u8], offset: u64) -> io::Result<()> {
+        (**self).write_all_at(buf, offset)
     }
 }
 
-#[cfg(any(unix, wasi_ext))]
-impl AsRawFd for SyncFile {
+impl<W> WriteAt for std::rc::Rc<W>
+where
+    W: WriteAt + ?Sized,
+{
     #[inline]
-    fn as_raw_fd(&self) -> RawFd {
-        self.file.as_raw_fd()
+    fn write_at(&self, buf: &[u8], offset: u64) -> io::Result<usize> {
+        (**self).write_at(buf, offset)
+    }
+
+    #[inline]
+    fn write_all_at(&self, buf: &[u8], offset: u64) -> io::Result<()> {
+        (**self).write_all_at(buf, offset)
     }
 }
 
-#[cfg(target_os = "windows")]
-impl AsRawHandle for SyncFile {
+impl WriteAt for io::Sink {
     #[inline]
-    fn as_raw_handle(&self) -> RawHandle {
-        self.file.as_raw_handle()
+    fn write_at(&self, buf: &[u8], _offset: u64) -> io::Result<usize> {
+        Ok(buf.len())
+    }
+
+    #[inline]
+    fn write_all_at(&self, _buf: &[u8], _offset: u64) -> io::Result<()> {
+        Ok(())
     }
 }
 
-#[cfg(any(unix, wasi_ext))]
-impl FromRawFd for SyncFile {
-    #[inline]
-    unsafe fn from_raw_fd(fd: RawFd) -> Self {
-        Self::from(File::from_raw_fd(fd))
-    }
+#[cold]
+fn fill_buffer_error() -> io::Error {
+    io::Error::new(io::ErrorKind::UnexpectedEof, "failed to fill whole buffer")
 }
 
-#[cfg(target_os = "windows")]
-impl FromRawHandle for SyncFile {
-    #[inline]
-    unsafe fn from_raw_handle(handle: RawHandle) -> Self {
-        Self::from(File::from_raw_handle(handle))
-    }
+#[cold]
+fn write_buffer_error() -> io::Error {
+    io::Error::new(io::ErrorKind::WriteZero, "failed to write whole buffer")
 }
 
 #[cfg(test)]
@@ -425,5 +422,6 @@ mod tests {
         assert_eq!(f.seek(io::SeekFrom::Current(-2)).unwrap(), 7);
         f.read_exact(&mut buf[..2]).unwrap();
         assert_eq!(&buf[..2], b"ht");
+        assert!(f.seek(io::SeekFrom::Current(-10)).is_err());
     }
 }
