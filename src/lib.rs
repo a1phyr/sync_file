@@ -121,10 +121,10 @@ pub trait ReadAt {
                 Err(e) => return Err(e),
             }
         }
-        if !buf.is_empty() {
-            Err(fill_buffer_error())
-        } else {
+        if buf.is_empty() {
             Ok(())
+        } else {
+            Err(fill_buffer_error())
         }
     }
 }
@@ -306,7 +306,7 @@ pub trait WriteAt {
     /// # Errors
     ///
     /// This function will return the first error of
-    /// non-[`io::ErrorKind::Interrupted`] kind that write_at returns.
+    /// non-[`io::ErrorKind::Interrupted`] kind that `write_at` returns.
     fn write_all_at(&self, mut buf: &[u8], mut offset: u64) -> io::Result<()> {
         while !buf.is_empty() {
             match self.write_at(buf, offset) {
@@ -315,7 +315,7 @@ pub trait WriteAt {
                 }
                 Ok(n) => {
                     buf = &buf[n..];
-                    offset += n as u64
+                    offset += n as u64;
                 }
                 Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
                 Err(e) => return Err(e),

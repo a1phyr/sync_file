@@ -361,9 +361,8 @@ impl io::Seek for SyncFile {
                 let (offset, overflowed) = self.offset.overflowing_add(p as u64);
                 if overflowed ^ (p < 0) {
                     return Err(invalid_seek());
-                } else {
-                    offset
                 }
+                offset
             }
             io::SeekFrom::End(_) => self.file.with_file(|mut f| f.seek(pos))?,
         };
