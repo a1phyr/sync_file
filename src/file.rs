@@ -290,6 +290,15 @@ impl SyncFile {
         let f = File::create(path.as_ref())?;
         Ok(SyncFile::from(f))
     }
+
+    /// Returns the offset used when reading the file.
+    ///
+    /// This is equivalent to [`io::Seek::stream_position`] but does not use a
+    /// fallible API nor require a mutable reference.
+    #[must_use]
+    pub fn offset(&self) -> u64 {
+        self.offset
+    }
 }
 
 impl std::ops::Deref for SyncFile {
