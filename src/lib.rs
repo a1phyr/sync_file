@@ -65,7 +65,7 @@
 #![warn(missing_docs)]
 
 mod file;
-pub use file::{PositionalFile, SyncFile};
+pub use file::{RandomAccessFile, SyncFile};
 
 use std::{cmp::min, convert::TryInto, io};
 

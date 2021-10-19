@@ -27,25 +27,25 @@ type FileRepr = Mutex<File>;
 
 /// A file with cross-platform positioned I/O.
 #[derive(Debug)]
-pub struct PositionalFile(FileRepr);
+pub struct RandomAccessFile(FileRepr);
 
-impl PositionalFile {
+impl RandomAccessFile {
     /// Attempts to open a file in read-only mode.
     ///
     /// See [`File::open`] for details.
     #[inline]
-    pub fn open<P: AsRef<Path>>(path: P) -> io::Result<PositionalFile> {
+    pub fn open<P: AsRef<Path>>(path: P) -> io::Result<RandomAccessFile> {
         let f = File::open(path.as_ref())?;
-        Ok(PositionalFile::from(f))
+        Ok(RandomAccessFile::from(f))
     }
 
     /// Opens a file in write-only mode.
     ///
     /// See [`File::create`] for details.
     #[inline]
-    pub fn create<P: AsRef<Path>>(path: P) -> io::Result<PositionalFile> {
+    pub fn create<P: AsRef<Path>>(path: P) -> io::Result<RandomAccessFile> {
         let f = File::create(path.as_ref())?;
-        Ok(PositionalFile::from(f))
+        Ok(RandomAccessFile::from(f))
     }
 
     #[inline]
@@ -120,7 +120,7 @@ impl PositionalFile {
     }
 }
 
-impl ReadAt for PositionalFile {
+impl ReadAt for RandomAccessFile {
     fn read_at(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
         #[cfg(any(unix, wasi_ext))]
         {
@@ -157,7 +157,7 @@ impl ReadAt for PositionalFile {
     }
 }
 
-impl WriteAt for PositionalFile {
+impl WriteAt for RandomAccessFile {
     fn write_at(&self, buf: &[u8], offset: u64) -> io::Result<usize> {
         #[cfg(any(unix, wasi_ext))]
         {
@@ -194,26 +194,26 @@ impl WriteAt for PositionalFile {
     }
 }
 
-impl From<File> for PositionalFile {
-    /// Creates a new `SyncFile` from an open [`File`].
+impl From<File> for RandomAccessFile {
+    /// Creates a new `RandomAccessFile` from an open [`File`].
     #[inline]
-    fn from(file: File) -> PositionalFile {
+    fn from(file: File) -> RandomAccessFile {
         #[cfg(not(any(unix, target_os = "windows", wasi_ext)))]
         let file = Mutex::new(file);
 
-        PositionalFile(file)
+        RandomAccessFile(file)
     }
 }
 
-impl From<PositionalFile> for File {
+impl From<RandomAccessFile> for File {
     #[inline]
-    fn from(file: PositionalFile) -> File {
+    fn from(file: RandomAccessFile) -> File {
         file.into_inner()
     }
 }
 
 #[cfg(any(unix, wasi_ext))]
-impl AsRawFd for PositionalFile {
+impl AsRawFd for RandomAccessFile {
     #[inline]
     fn as_raw_fd(&self) -> RawFd {
         self.0.as_raw_fd()
@@ -221,7 +221,7 @@ impl AsRawFd for PositionalFile {
 }
 
 #[cfg(target_os = "windows")]
-impl AsRawHandle for PositionalFile {
+impl AsRawHandle for RandomAccessFile {
     #[inline]
     fn as_raw_handle(&self) -> RawHandle {
         self.0.as_raw_handle()
@@ -229,7 +229,7 @@ impl AsRawHandle for PositionalFile {
 }
 
 #[cfg(any(unix, wasi_ext))]
-impl FromRawFd for PositionalFile {
+impl FromRawFd for RandomAccessFile {
     #[inline]
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
         Self::from(File::from_raw_fd(fd))
@@ -237,7 +237,7 @@ impl FromRawFd for PositionalFile {
 }
 
 #[cfg(target_os = "windows")]
-impl FromRawHandle for PositionalFile {
+impl FromRawHandle for RandomAccessFile {
     #[inline]
     unsafe fn from_raw_handle(handle: RawHandle) -> Self {
         Self::from(File::from_raw_handle(handle))
@@ -245,7 +245,7 @@ impl FromRawHandle for PositionalFile {
 }
 
 #[cfg(any(unix, wasi_ext))]
-impl IntoRawFd for PositionalFile {
+impl IntoRawFd for RandomAccessFile {
     #[inline]
     fn into_raw_fd(self) -> RawFd {
         self.0.into_raw_fd()
@@ -253,7 +253,7 @@ impl IntoRawFd for PositionalFile {
 }
 
 #[cfg(target_os = "windows")]
-impl IntoRawHandle for PositionalFile {
+impl IntoRawHandle for RandomAccessFile {
     #[inline]
     fn into_raw_handle(self) -> RawHandle {
         self.0.into_raw_handle()
@@ -269,7 +269,7 @@ impl IntoRawHandle for PositionalFile {
 /// be used concurrently without issues.
 #[derive(Debug, Clone)]
 pub struct SyncFile {
-    file: Arc<PositionalFile>,
+    file: Arc<RandomAccessFile>,
     offset: u64,
 }
 
@@ -302,10 +302,10 @@ impl SyncFile {
 }
 
 impl std::ops::Deref for SyncFile {
-    type Target = PositionalFile;
+    type Target = RandomAccessFile;
 
     #[inline]
-    fn deref(&self) -> &PositionalFile {
+    fn deref(&self) -> &RandomAccessFile {
         &self.file
     }
 }
@@ -406,7 +406,7 @@ impl From<File> for SyncFile {
     #[inline]
     fn from(file: File) -> SyncFile {
         SyncFile {
-            file: Arc::new(PositionalFile::from(file)),
+            file: Arc::new(RandomAccessFile::from(file)),
             offset: 0,
         }
     }
