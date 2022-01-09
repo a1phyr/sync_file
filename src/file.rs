@@ -412,6 +412,19 @@ impl From<File> for SyncFile {
     }
 }
 
+impl From<RandomAccessFile> for SyncFile {
+    /// Creates a new `SyncFile` from an open [`RandomAccessFile`].
+    ///
+    /// The cursor starts at the beginning of the file.
+    #[inline]
+    fn from(file: RandomAccessFile) -> SyncFile {
+        SyncFile {
+            file: Arc::new(file),
+            offset: 0,
+        }
+    }
+}
+
 #[cfg(any(unix, wasi_ext))]
 impl AsRawFd for SyncFile {
     #[inline]
