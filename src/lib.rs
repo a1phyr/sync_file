@@ -274,8 +274,12 @@ impl ReadAt for io::Empty {
     }
 
     #[inline]
-    fn read_exact_at(&self, _buf: &mut [u8], _offset: u64) -> io::Result<()> {
-        Err(fill_buffer_error())
+    fn read_exact_at(&self, buf: &mut [u8], _offset: u64) -> io::Result<()> {
+        if buf.is_empty() {
+            Ok(())
+        } else {
+            Err(fill_buffer_error())
+        }
     }
 }
 
