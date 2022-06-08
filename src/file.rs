@@ -95,6 +95,16 @@ impl RandomAccessFile {
         self.with_file(|f| f.metadata())
     }
 
+    /// Creates a new `File` instance that shares the same underlying file handle
+    /// as the existing `File` instance
+    ///
+    /// See [`File::try_clone`] for details.
+    #[inline]
+    pub fn try_clone(&self) -> io::Result<RandomAccessFile> {
+        let file = self.with_file(|f| f.try_clone())?;
+        Ok(RandomAccessFile::from(file))
+    }
+
     /// Changes the permissions on the underlying file.
     ///
     /// See [`File::set_permissions`] for details.
