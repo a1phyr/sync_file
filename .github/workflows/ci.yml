@@ -29,13 +29,13 @@ jobs:
         run: cargo test
 
   check:
-    name: Check
+    name: Check wasi
     runs-on: ubuntu-latest
     strategy:
       matrix:
         rust:
           - 1.51
-          - nightly
+          - stable
 
     steps:
       - name: Checkout sources
@@ -49,4 +49,4 @@ jobs:
           override: true
 
       - name: cargo check
-        run: cargo check
+        run: cargo check --target wasm32-wasi

@@ -1,4 +1,4 @@
-#[cfg(not(any(unix, target_os = "windows", wasi_ext)))]
+#[cfg(not(any(unix, target_os = "windows", target_os = "wasi")))]
 use std::sync::{Mutex, PoisonError};
 
 use std::{
@@ -10,19 +10,57 @@ use std::{
 
 #[cfg(unix)]
 use std::os::unix::prelude::*;
-#[cfg(wasi_ext)]
+#[cfg(target_os = "wasi")]
 use std::os::wasi::prelude::*;
 #[cfg(target_os = "windows")]
 use std::os::windows::prelude::*;
 
 use super::{ReadAt, WriteAt};
 
-#[cfg(any(unix, target_os = "windows", wasi_ext))]
+#[cfg(target_os = "wasi")]
+trait FileExt {
+    fn read_at(&self, buffer: &mut [u8], offset: u64) -> io::Result<usize>;
+
+    fn write_at(&self, buffer: &[u8], offset: u64) -> io::Result<usize>;
+}
+
+#[cfg(target_os = "wasi")]
+impl FileExt for File {
+    fn read_at(&self, buffer: &mut [u8], offset: u64) -> io::Result<usize> {
+        unsafe {
+            let raw = self.as_raw_fd() as wasi::Fd;
+
+            let iovec = [wasi::Iovec {
+                buf: buffer.as_mut_ptr(),
+                buf_len: buffer.len(),
+            }];
+
+            wasi::fd_pread(raw, &iovec, offset)
+                .map_err(|err| io::Error::from_raw_os_error(err.raw() as _))
+        }
+    }
+
+    fn write_at(&self, buffer: &[u8], offset: u64) -> io::Result<usize> {
+        unsafe {
+            let raw = self.as_raw_fd() as wasi::Fd;
+
+            let iovec = [wasi::Ciovec {
+                buf: buffer.as_ptr(),
+                buf_len: buffer.len(),
+            }];
+
+            wasi::fd_pwrite(raw, &iovec, offset)
+                .map_err(|err| io::Error::from_raw_os_error(err.raw() as _))
+        }
+    }
+}
+
+#[cfg(any(unix, target_os = "windows", target_os = "wasi"))]
 type FileRepr = File;
 
 // If no platform-specific extension is available, we use a mutex to make sure
 // operations (seek + read) are atomic.
-#[cfg(not(any(unix, target_os = "windows", wasi_ext)))]
+#[cfg(not(any(unix, target_os = "windows", target_os = "wasi")))]
 type FileRepr = Mutex<File>;
 
 /// A file with cross-platform positioned I/O.
@@ -50,12 +88,12 @@ impl RandomAccessFile {
 
     #[inline]
     pub(crate) fn with_file<T>(&self, f: impl FnOnce(&File) -> T) -> T {
-        #[cfg(any(unix, target_os = "windows", wasi_ext))]
+        #[cfg(any(unix, target_os = "windows", target_os = "wasi"))]
         {
             f(&self.0)
         }
 
-        #[cfg(not(any(unix, target_os = "windows", wasi_ext)))]
+        #[cfg(not(any(unix, target_os = "windows", target_os = "wasi")))]
         {
             f(&self.0.lock().unwrap_or_else(PoisonError::into_inner))
         }
@@ -118,12 +156,12 @@ impl RandomAccessFile {
     /// The file's cursor position is unspecified.
     #[inline]
     pub fn into_inner(self) -> File {
-        #[cfg(any(unix, target_os = "windows", wasi_ext))]
+        #[cfg(any(unix, target_os = "windows", target_os = "wasi"))]
         {
             self.0
         }
 
-        #[cfg(not(any(unix, target_os = "windows", wasi_ext)))]
+        #[cfg(not(any(unix, target_os = "windows", target_os = "wasi")))]
         {
             self.0.into_inner().unwrap_or_else(PoisonError::into_inner)
         }
@@ -132,7 +170,7 @@ impl RandomAccessFile {
 
 impl ReadAt for RandomAccessFile {
     fn read_at(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
-        #[cfg(any(unix, wasi_ext))]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             self.0.read_at(buf, offset)
         }
@@ -142,7 +180,7 @@ impl ReadAt for RandomAccessFile {
             self.0.seek_read(buf, offset)
         }
 
-        #[cfg(not(any(unix, target_os = "windows", wasi_ext)))]
+        #[cfg(not(any(unix, target_os = "windows", target_os = "wasi")))]
         {
             use io::{Read, Seek};
 
@@ -152,12 +190,12 @@ impl ReadAt for RandomAccessFile {
         }
     }
 
-    #[cfg(any(unix, wasi_ext))]
+    #[cfg(any(unix))]
     fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
         self.0.read_exact_at(buf, offset)
     }
 
-    #[cfg(not(any(unix, target_os = "windows", wasi_ext)))]
+    #[cfg(not(any(unix, target_os = "windows", target_os = "wasi")))]
     fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
         use io::{Read, Seek};
 
@@ -169,7 +207,7 @@ impl ReadAt for RandomAccessFile {
 
 impl WriteAt for RandomAccessFile {
     fn write_at(&self, buf: &[u8], offset: u64) -> io::Result<usize> {
-        #[cfg(any(unix, wasi_ext))]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             self.0.write_at(buf, offset)
         }
@@ -179,7 +217,7 @@ impl WriteAt for RandomAccessFile {
             self.0.seek_write(buf, offset)
         }
 
-        #[cfg(not(any(unix, target_os = "windows", wasi_ext)))]
+        #[cfg(not(any(unix, target_os = "windows", target_os = "wasi")))]
         {
             use io::{Seek, Write};
 
@@ -189,12 +227,12 @@ impl WriteAt for RandomAccessFile {
         }
     }
 
-    #[cfg(any(unix, wasi_ext))]
+    #[cfg(unix)]
     fn write_all_at(&self, buf: &[u8], offset: u64) -> io::Result<()> {
         self.0.write_all_at(buf, offset)
     }
 
-    #[cfg(not(any(unix, target_os = "windows", wasi_ext)))]
+    #[cfg(not(any(unix, target_os = "windows", target_os = "wasi")))]
     fn write_all_at(&self, buf: &[u8], offset: u64) -> io::Result<()> {
         use io::{Seek, Write};
 
@@ -208,7 +246,7 @@ impl From<File> for RandomAccessFile {
     /// Creates a new `RandomAccessFile` from an open [`File`].
     #[inline]
     fn from(file: File) -> RandomAccessFile {
-        #[cfg(not(any(unix, target_os = "windows", wasi_ext)))]
+        #[cfg(not(any(unix, target_os = "windows", target_os = "wasi")))]
         let file = Mutex::new(file);
 
         RandomAccessFile(file)
@@ -222,7 +260,7 @@ impl From<RandomAccessFile> for File {
     }
 }
 
-#[cfg(any(unix, wasi_ext))]
+#[cfg(any(unix, target_os = "wasi"))]
 impl AsRawFd for RandomAccessFile {
     #[inline]
     fn as_raw_fd(&self) -> RawFd {
@@ -238,7 +276,7 @@ impl AsRawHandle for RandomAccessFile {
     }
 }
 
-#[cfg(any(unix, wasi_ext))]
+#[cfg(any(unix, target_os = "wasi"))]
 impl FromRawFd for RandomAccessFile {
     #[inline]
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
@@ -254,7 +292,7 @@ impl FromRawHandle for RandomAccessFile {
     }
 }
 
-#[cfg(any(unix, wasi_ext))]
+#[cfg(any(unix, target_os = "wasi"))]
 impl IntoRawFd for RandomAccessFile {
     #[inline]
     fn into_raw_fd(self) -> RawFd {
@@ -435,7 +473,7 @@ impl From<RandomAccessFile> for SyncFile {
     }
 }
 
-#[cfg(any(unix, wasi_ext))]
+#[cfg(any(unix, target_os = "wasi"))]
 impl AsRawFd for SyncFile {
     #[inline]
     fn as_raw_fd(&self) -> RawFd {
@@ -451,7 +489,7 @@ impl AsRawHandle for SyncFile {
     }
 }
 
-#[cfg(any(unix, wasi_ext))]
+#[cfg(any(unix, target_os = "wasi"))]
 impl FromRawFd for SyncFile {
     #[inline]
     unsafe fn from_raw_fd(fd: RawFd) -> Self {

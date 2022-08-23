@@ -61,7 +61,6 @@
 //! If platform-specific extensions are not available, `SyncFile` fallbacks to a
 //! mutex.
 
-#![cfg_attr(wasi_ext, feature(wasi_ext))]
 #![warn(missing_docs)]
 
 mod file;
