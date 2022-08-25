@@ -10,7 +10,7 @@ jobs:
       matrix:
         rust:
           - stable
-          - 1.51
+          - 1.56
         target:
           - ubuntu-latest
           - windows-latest
@@ -34,7 +34,7 @@ jobs:
     strategy:
       matrix:
         rust:
-          - 1.51
+          - 1.56
           - stable
 
     steps:

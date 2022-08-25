@@ -1,8 +1,8 @@
 [package]
 name = "sync_file"
 version = "0.2.2"
-edition = "2018"
-rust-version = "1.51"
+edition = "2021"
+rust-version = "1.56"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 description = "Files that can be read concurrently"
