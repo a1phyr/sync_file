@@ -64,6 +64,10 @@ type FileRepr = File;
 type FileRepr = Mutex<File>;
 
 /// A file with cross-platform positioned I/O.
+///
+/// Reading from this file or writing to it does not use its internal OS cursor,
+/// but it may move it anyway. This can cause surprising behaviour if shared
+/// with a [`File`] (this could be done with `try_clone`).
 #[derive(Debug)]
 pub struct RandomAccessFile(FileRepr);
 
