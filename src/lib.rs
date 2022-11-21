@@ -77,22 +77,12 @@ pub trait ReadAt {
     ///
     /// Returns the number of bytes read.
     ///
-    /// The offset is relative to the start of the file and thus independent
-    /// from the current cursor.
-    ///
-    /// The current file cursor is not affected by this function.
-    ///
     /// Note that similar to [`io::Read::read`], it is not an error to return with
     /// a short read.
     fn read_at(&self, buf: &mut [u8], offset: u64) -> io::Result<usize>;
 
     /// Reads the exact number of byte required to fill buf from the given
     /// offset.
-    ///
-    /// The offset is relative to the start of the file and thus independent
-    /// from the current cursor.
-    ///
-    /// The current file cursor is not affected by this function.
     ///
     /// # Errors
     ///
@@ -291,20 +281,11 @@ pub trait WriteAt {
     ///
     /// Returns the number of bytes written.
     ///
-    /// The offset is relative to the start of the file and thus independent from the current cursor.
-    ///
-    /// The current file cursor is not affected by this function.
-    ///
     /// Note that similar to [`io::Write::write`], it is not an error to return a
     /// short write.
     fn write_at(&self, buf: &[u8], offset: u64) -> io::Result<usize>;
 
     /// Attempts to write an entire buffer starting from a given offset.
-    ///
-    /// The offset is relative to the start of the file and thus independent
-    /// from the current cursor.
-    ///
-    /// The current file cursor is not affected by this function.
     ///
     /// # Errors
     ///
