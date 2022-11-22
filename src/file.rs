@@ -389,14 +389,14 @@ impl WriteAt for SyncFile {
 impl io::Read for SyncFile {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let read = self.read_at(buf, self.offset)?;
+        let read = self.file.read_at(buf, self.offset)?;
         self.offset += read as u64;
         Ok(read)
     }
 
     #[inline]
     fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
-        let ret = self.read_exact_at(buf, self.offset);
+        let ret = self.file.read_exact_at(buf, self.offset);
         if ret.is_ok() {
             self.offset += buf.len() as u64;
         }
@@ -431,14 +431,14 @@ impl io::Seek for SyncFile {
 impl io::Write for SyncFile {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let written = self.write_at(buf, self.offset)?;
+        let written = self.file.write_at(buf, self.offset)?;
         self.offset += written as u64;
         Ok(written)
     }
 
     #[inline]
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        let ret = self.write_all_at(buf, self.offset);
+        let ret = self.file.write_all_at(buf, self.offset);
         if ret.is_ok() {
             self.offset += buf.len() as u64;
         }
