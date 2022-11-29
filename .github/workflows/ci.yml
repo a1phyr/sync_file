@@ -17,16 +17,13 @@ jobs:
 
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ matrix.rust }}
-          override: true
+        run: rustup toolchain add ${{ matrix.rust }}
 
       - name: cargo test
-        run: cargo test
+        run: cargo +${{ matrix.rust }} test
 
   check:
     name: Check wasi
@@ -39,14 +36,10 @@ jobs:
 
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ matrix.rust }}
-          target: wasm32-wasi
-          override: true
+        run: rustup toolchain add ${{ matrix.rust }} && rustup +${{ matrix.rust }} target add wasm32-wasi
 
       - name: cargo check
-        run: cargo check --target wasm32-wasi
+        run: cargo +${{ matrix.rust }} check --target wasm32-wasi
