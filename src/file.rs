@@ -2,6 +2,7 @@
 use std::sync::{Mutex, PoisonError};
 
 use std::{
+    fmt,
     fs::{self, File},
     io,
     path::Path,
@@ -14,6 +15,8 @@ use std::os::unix::prelude::*;
 use std::os::wasi::prelude::*;
 #[cfg(target_os = "windows")]
 use std::os::windows::prelude::*;
+
+use crate::Adapter;
 
 use super::{ReadAt, WriteAt};
 
@@ -319,11 +322,8 @@ impl IntoRawHandle for RandomAccessFile {
 ///
 /// `SyncFile`s are cheap to clone and clones use distinct cursors, so they can
 /// be used concurrently without issues.
-#[derive(Debug, Clone)]
-pub struct SyncFile {
-    file: Arc<RandomAccessFile>,
-    offset: u64,
-}
+#[derive(Clone)]
+pub struct SyncFile(Adapter<Arc<RandomAccessFile>>);
 
 impl SyncFile {
     /// Attempts to open a file in read-only mode.
@@ -349,7 +349,7 @@ impl SyncFile {
     /// fallible API nor require a mutable reference.
     #[must_use]
     pub fn offset(&self) -> u64 {
-        self.offset
+        self.0.offset()
     }
 }
 
@@ -358,96 +358,86 @@ impl std::ops::Deref for SyncFile {
 
     #[inline]
     fn deref(&self) -> &RandomAccessFile {
-        &self.file
+        self.0.get_ref()
     }
 }
 
 impl ReadAt for SyncFile {
     #[inline]
     fn read_at(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
-        self.file.read_at(buf, offset)
+        self.0.read_at(buf, offset)
     }
 
     #[inline]
     fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
-        self.file.read_exact_at(buf, offset)
+        self.0.read_exact_at(buf, offset)
     }
 }
 
 impl WriteAt for SyncFile {
     #[inline]
     fn write_at(&self, buf: &[u8], offset: u64) -> io::Result<usize> {
-        self.file.write_at(buf, offset)
+        self.0.write_at(buf, offset)
     }
 
     #[inline]
     fn write_all_at(&self, buf: &[u8], offset: u64) -> io::Result<()> {
-        self.file.write_all_at(buf, offset)
+        self.0.write_all_at(buf, offset)
     }
 }
 
 impl io::Read for SyncFile {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let read = self.file.read_at(buf, self.offset)?;
-        self.offset += read as u64;
-        Ok(read)
+        self.0.read(buf)
     }
 
     #[inline]
     fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
-        let ret = self.file.read_exact_at(buf, self.offset);
-        if ret.is_ok() {
-            self.offset += buf.len() as u64;
-        }
-        ret
+        self.0.read_exact(buf)
     }
 }
 
 impl io::Seek for SyncFile {
     #[inline]
     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
-        self.offset = match pos {
-            io::SeekFrom::Start(p) => p,
-            io::SeekFrom::Current(p) => {
-                let (offset, overflowed) = self.offset.overflowing_add(p as u64);
-                if overflowed ^ (p < 0) {
-                    return Err(invalid_seek());
-                }
-                offset
+        let pos = match pos {
+            // Override `Adapter`'s implementation to support seeking to the end of file.
+            io::SeekFrom::End(_) => {
+                let offset = self.0.get_ref().with_file(|mut f| f.seek(pos))?;
+                io::SeekFrom::Start(offset)
             }
-            io::SeekFrom::End(_) => self.file.with_file(|mut f| f.seek(pos))?,
+            pos => pos,
         };
 
-        Ok(self.offset)
+        self.0.seek(pos)
+    }
+
+    #[inline]
+    fn rewind(&mut self) -> io::Result<()> {
+        self.0.rewind()
     }
 
     #[inline]
     fn stream_position(&mut self) -> io::Result<u64> {
-        Ok(self.offset)
+        Ok(self.offset())
     }
 }
 
 impl io::Write for SyncFile {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let written = self.file.write_at(buf, self.offset)?;
-        self.offset += written as u64;
-        Ok(written)
+        self.0.write(buf)
     }
 
     #[inline]
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        let ret = self.file.write_all_at(buf, self.offset);
-        if ret.is_ok() {
-            self.offset += buf.len() as u64;
-        }
-        ret
+        self.0.write_all(buf)
     }
 
     #[inline]
     fn flush(&mut self) -> io::Result<()> {
-        self.file.with_file(|mut f| f.flush())
+        self.0.get_ref().with_file(|mut f| f.flush())
     }
 }
 
@@ -457,10 +447,7 @@ impl From<File> for SyncFile {
     /// The cursor starts at the beginning of the file.
     #[inline]
     fn from(file: File) -> SyncFile {
-        SyncFile {
-            file: Arc::new(RandomAccessFile::from(file)),
-            offset: 0,
-        }
+        SyncFile::from(RandomAccessFile::from(file))
     }
 }
 
@@ -470,10 +457,7 @@ impl From<RandomAccessFile> for SyncFile {
     /// The cursor starts at the beginning of the file.
     #[inline]
     fn from(file: RandomAccessFile) -> SyncFile {
-        SyncFile {
-            file: Arc::new(file),
-            offset: 0,
-        }
+        SyncFile(Adapter::new(Arc::new(file)))
     }
 }
 
@@ -481,7 +465,7 @@ impl From<RandomAccessFile> for SyncFile {
 impl AsRawFd for SyncFile {
     #[inline]
     fn as_raw_fd(&self) -> RawFd {
-        self.file.as_raw_fd()
+        self.0.get_ref().as_raw_fd()
     }
 }
 
@@ -489,7 +473,7 @@ impl AsRawFd for SyncFile {
 impl AsRawHandle for SyncFile {
     #[inline]
     fn as_raw_handle(&self) -> RawHandle {
-        self.file.as_raw_handle()
+        self.0.get_ref().as_raw_handle()
     }
 }
 
@@ -509,10 +493,11 @@ impl FromRawHandle for SyncFile {
     }
 }
 
-#[cold]
-fn invalid_seek() -> io::Error {
-    io::Error::new(
-        io::ErrorKind::InvalidInput,
-        "invalid seek to a negative or overflowing position",
-    )
+impl fmt::Debug for SyncFile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SyncFile")
+            .field("file", self.0.get_ref())
+            .field("offset", &self.offset())
+            .finish()
+    }
 }

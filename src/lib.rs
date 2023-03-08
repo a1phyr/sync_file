@@ -63,7 +63,10 @@
 
 #![warn(missing_docs)]
 
+mod adapter;
 mod file;
+
+pub use adapter::Adapter;
 pub use file::{RandomAccessFile, SyncFile};
 
 use std::{cmp::min, convert::TryInto, io};
