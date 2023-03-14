@@ -247,6 +247,12 @@ impl WriteAt for RandomAccessFile {
         file.seek(io::SeekFrom::Start(offset))?;
         file.write_all(buf)
     }
+
+    #[inline]
+    fn flush(&self) -> io::Result<()> {
+        use std::io::Write;
+        self.with_file(|mut f| f.flush())
+    }
 }
 
 impl From<File> for RandomAccessFile {
@@ -384,6 +390,11 @@ impl WriteAt for SyncFile {
     fn write_all_at(&self, buf: &[u8], offset: u64) -> io::Result<()> {
         self.0.write_all_at(buf, offset)
     }
+
+    #[inline]
+    fn flush(&self) -> io::Result<()> {
+        self.0.flush()
+    }
 }
 
 impl io::Read for SyncFile {
@@ -437,7 +448,7 @@ impl io::Write for SyncFile {
 
     #[inline]
     fn flush(&mut self) -> io::Result<()> {
-        self.0.get_ref().with_file(|mut f| f.flush())
+        self.0.flush()
     }
 }
 

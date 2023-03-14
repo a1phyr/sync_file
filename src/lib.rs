@@ -310,6 +310,18 @@ pub trait WriteAt {
         }
         Ok(())
     }
+
+    /// Flush this output stream, ensuring that all intermediately buffered
+    /// contents reach their destination.
+    ///
+    /// # Errors
+    ///
+    /// It is considered an error if not all bytes could be written due to I/O
+    /// errors or EOF being reached.
+    #[inline]
+    fn flush(&self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 impl<W> WriteAt for &W
@@ -324,6 +336,11 @@ where
     #[inline]
     fn write_all_at(&self, buf: &[u8], offset: u64) -> io::Result<()> {
         (**self).write_all_at(buf, offset)
+    }
+
+    #[inline]
+    fn flush(&self) -> io::Result<()> {
+        (**self).flush()
     }
 }
 
@@ -340,6 +357,11 @@ where
     fn write_all_at(&self, buf: &[u8], offset: u64) -> io::Result<()> {
         (**self).write_all_at(buf, offset)
     }
+
+    #[inline]
+    fn flush(&self) -> io::Result<()> {
+        (**self).flush()
+    }
 }
 
 impl<W> WriteAt for std::sync::Arc<W>
@@ -355,6 +377,11 @@ where
     fn write_all_at(&self, buf: &[u8], offset: u64) -> io::Result<()> {
         (**self).write_all_at(buf, offset)
     }
+
+    #[inline]
+    fn flush(&self) -> io::Result<()> {
+        (**self).flush()
+    }
 }
 
 impl<W> WriteAt for std::rc::Rc<W>
@@ -369,6 +396,11 @@ where
     #[inline]
     fn write_all_at(&self, buf: &[u8], offset: u64) -> io::Result<()> {
         (**self).write_all_at(buf, offset)
+    }
+
+    #[inline]
+    fn flush(&self) -> io::Result<()> {
+        (**self).flush()
     }
 }
 

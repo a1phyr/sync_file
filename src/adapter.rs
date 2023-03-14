@@ -76,6 +76,11 @@ where
     fn write_all_at(&self, buf: &[u8], offset: u64) -> io::Result<()> {
         self.inner.write_all_at(buf, offset)
     }
+
+    #[inline]
+    fn flush(&self) -> io::Result<()> {
+        self.inner.flush()
+    }
 }
 
 impl<T> io::Read for Adapter<T>
@@ -121,7 +126,7 @@ where
 
     #[inline]
     fn flush(&mut self) -> io::Result<()> {
-        Ok(())
+        self.inner.flush()
     }
 }
 
