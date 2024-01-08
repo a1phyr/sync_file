@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/sync_file.svg)](https://crates.io/crates/sync_file)
 [![Docs.rs](https://docs.rs/sync_file/badge.svg)](https://docs.rs/sync_file/)
-![Minimum rustc version](https://img.shields.io/badge/rustc-1.56+-lightgray.svg)
+![Minimum rustc version](https://img.shields.io/badge/rustc-1.63+-lightgray.svg)
 
 Files that can be read concurrently.
 
@@ -61,4 +61,3 @@ at your option.
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
-
