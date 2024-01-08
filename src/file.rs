@@ -290,6 +290,22 @@ impl AsRawHandle for RandomAccessFile {
 }
 
 #[cfg(any(unix, target_os = "wasi"))]
+impl AsFd for RandomAccessFile {
+    #[inline]
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.0.as_fd()
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl AsHandle for RandomAccessFile {
+    #[inline]
+    fn as_handle(&self) -> BorrowedHandle<'_> {
+        self.0.as_handle()
+    }
+}
+
+#[cfg(any(unix, target_os = "wasi"))]
 impl FromRawFd for RandomAccessFile {
     #[inline]
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
@@ -306,6 +322,22 @@ impl FromRawHandle for RandomAccessFile {
 }
 
 #[cfg(any(unix, target_os = "wasi"))]
+impl From<OwnedFd> for RandomAccessFile {
+    #[inline]
+    fn from(fd: OwnedFd) -> Self {
+        Self::from(File::from(fd))
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl From<OwnedHandle> for RandomAccessFile {
+    #[inline]
+    fn from(handle: OwnedHandle) -> Self {
+        Self::from(File::from(handle))
+    }
+}
+
+#[cfg(any(unix, target_os = "wasi"))]
 impl IntoRawFd for RandomAccessFile {
     #[inline]
     fn into_raw_fd(self) -> RawFd {
@@ -318,6 +350,22 @@ impl IntoRawHandle for RandomAccessFile {
     #[inline]
     fn into_raw_handle(self) -> RawHandle {
         self.0.into_raw_handle()
+    }
+}
+
+#[cfg(any(unix, target_os = "wasi"))]
+impl From<RandomAccessFile> for OwnedFd {
+    #[inline]
+    fn from(f: RandomAccessFile) -> Self {
+        f.0.into()
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl From<RandomAccessFile> for OwnedHandle {
+    #[inline]
+    fn from(f: RandomAccessFile) -> Self {
+        f.0.into()
     }
 }
 
@@ -489,6 +537,22 @@ impl AsRawHandle for SyncFile {
 }
 
 #[cfg(any(unix, target_os = "wasi"))]
+impl AsFd for SyncFile {
+    #[inline]
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.0.get_ref().as_fd()
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl AsHandle for SyncFile {
+    #[inline]
+    fn as_handle(&self) -> BorrowedHandle<'_> {
+        self.0.get_ref().as_handle()
+    }
+}
+
+#[cfg(any(unix, target_os = "wasi"))]
 impl FromRawFd for SyncFile {
     #[inline]
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
@@ -501,6 +565,22 @@ impl FromRawHandle for SyncFile {
     #[inline]
     unsafe fn from_raw_handle(handle: RawHandle) -> Self {
         Self::from(File::from_raw_handle(handle))
+    }
+}
+
+#[cfg(any(unix, target_os = "wasi"))]
+impl From<OwnedFd> for SyncFile {
+    #[inline]
+    fn from(fd: OwnedFd) -> Self {
+        Self::from(File::from(fd))
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl From<OwnedHandle> for SyncFile {
+    #[inline]
+    fn from(handle: OwnedHandle) -> Self {
+        Self::from(File::from(handle))
     }
 }
 
