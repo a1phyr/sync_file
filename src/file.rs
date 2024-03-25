@@ -24,7 +24,11 @@ use super::{ReadAt, WriteAt};
 trait FileExt {
     fn read_at(&self, buffer: &mut [u8], offset: u64) -> io::Result<usize>;
 
+    fn read_vectored_at(&self, bufs: &mut [io::IoSliceMut<'_>], offset: u64) -> io::Result<usize>;
+
     fn write_at(&self, buffer: &[u8], offset: u64) -> io::Result<usize>;
+
+    fn write_vectored_at(&self, bufs: &[io::IoSlice<'_>], offset: u64) -> io::Result<usize>;
 }
 
 #[cfg(target_os = "wasi")]
@@ -43,6 +47,16 @@ impl FileExt for File {
         }
     }
 
+    fn read_vectored_at(&self, bufs: &mut [io::IoSliceMut<'_>], offset: u64) -> io::Result<usize> {
+        unsafe {
+            let raw = self.as_raw_fd() as wasi::Fd;
+            let iovec = std::mem::transmute(bufs);
+
+            wasi::fd_pread(raw, iovec, offset)
+                .map_err(|err| io::Error::from_raw_os_error(err.raw() as _))
+        }
+    }
+
     fn write_at(&self, buffer: &[u8], offset: u64) -> io::Result<usize> {
         unsafe {
             let raw = self.as_raw_fd() as wasi::Fd;
@@ -53,6 +67,16 @@ impl FileExt for File {
             }];
 
             wasi::fd_pwrite(raw, &iovec, offset)
+                .map_err(|err| io::Error::from_raw_os_error(err.raw() as _))
+        }
+    }
+
+    fn write_vectored_at(&self, bufs: &[io::IoSlice<'_>], offset: u64) -> io::Result<usize> {
+        unsafe {
+            let raw = self.as_raw_fd() as wasi::Fd;
+            let iovec = std::mem::transmute(bufs);
+
+            wasi::fd_pwrite(raw, iovec, offset)
                 .map_err(|err| io::Error::from_raw_os_error(err.raw() as _))
         }
     }
@@ -210,6 +234,21 @@ impl ReadAt for RandomAccessFile {
         file.seek(io::SeekFrom::Start(offset))?;
         file.read_exact(buf)
     }
+
+    #[cfg(target_os = "wasi")]
+    #[inline]
+    fn read_vectored_at(&self, bufs: &mut [io::IoSliceMut<'_>], offset: u64) -> io::Result<usize> {
+        self.0.read_vectored_at(bufs, offset)
+    }
+
+    #[cfg(not(any(unix, target_os = "windows", target_os = "wasi")))]
+    fn read_vectored_at(&self, bufs: &mut [io::IoSliceMut<'_>], offset: u64) -> io::Result<usize> {
+        use io::{Read, Seek};
+
+        let file = &mut *self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        file.seek(io::SeekFrom::Start(offset))?;
+        file.read_vectored(bufs)
+    }
 }
 
 impl WriteAt for RandomAccessFile {
@@ -246,6 +285,21 @@ impl WriteAt for RandomAccessFile {
         let file = &mut *self.0.lock().unwrap_or_else(PoisonError::into_inner);
         file.seek(io::SeekFrom::Start(offset))?;
         file.write_all(buf)
+    }
+
+    #[cfg(target_os = "wasi")]
+    #[inline]
+    fn write_vectored_at(&self, bufs: &[io::IoSlice<'_>], offset: u64) -> io::Result<usize> {
+        self.0.write_vectored_at(bufs, offset)
+    }
+
+    #[cfg(not(any(unix, target_os = "windows", target_os = "wasi")))]
+    fn write_vectored_at(&self, bufs: &[io::IoSlice<'_>], offset: u64) -> io::Result<usize> {
+        use io::{Seek, Write};
+
+        let file = &mut *self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        file.seek(io::SeekFrom::Start(offset))?;
+        file.write_vectored(bufs)
     }
 
     #[inline]
@@ -426,6 +480,11 @@ impl ReadAt for SyncFile {
     fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
         self.0.read_exact_at(buf, offset)
     }
+
+    #[inline]
+    fn read_vectored_at(&self, bufs: &mut [io::IoSliceMut<'_>], offset: u64) -> io::Result<usize> {
+        self.0.read_vectored_at(bufs, offset)
+    }
 }
 
 impl WriteAt for SyncFile {
@@ -437,6 +496,11 @@ impl WriteAt for SyncFile {
     #[inline]
     fn write_all_at(&self, buf: &[u8], offset: u64) -> io::Result<()> {
         self.0.write_all_at(buf, offset)
+    }
+
+    #[inline]
+    fn write_vectored_at(&self, bufs: &[io::IoSlice<'_>], offset: u64) -> io::Result<usize> {
+        self.0.write_vectored_at(bufs, offset)
     }
 
     #[inline]
@@ -454,6 +518,11 @@ impl io::Read for SyncFile {
     #[inline]
     fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
         self.0.read_exact(buf)
+    }
+
+    #[inline]
+    fn read_vectored(&mut self, bufs: &mut [io::IoSliceMut<'_>]) -> io::Result<usize> {
+        self.0.read_vectored(bufs)
     }
 }
 
@@ -492,6 +561,11 @@ impl io::Write for SyncFile {
     #[inline]
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         self.0.write_all(buf)
+    }
+
+    #[inline]
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        self.0.write_vectored(bufs)
     }
 
     #[inline]

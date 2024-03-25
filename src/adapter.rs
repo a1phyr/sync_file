@@ -61,6 +61,11 @@ where
     fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
         self.inner.read_exact_at(buf, offset)
     }
+
+    #[inline]
+    fn read_vectored_at(&self, bufs: &mut [io::IoSliceMut<'_>], offset: u64) -> io::Result<usize> {
+        self.inner.read_vectored_at(bufs, offset)
+    }
 }
 
 impl<T> WriteAt for Adapter<T>
@@ -75,6 +80,11 @@ where
     #[inline]
     fn write_all_at(&self, buf: &[u8], offset: u64) -> io::Result<()> {
         self.inner.write_all_at(buf, offset)
+    }
+
+    #[inline]
+    fn write_vectored_at(&self, bufs: &[io::IoSlice<'_>], offset: u64) -> io::Result<usize> {
+        self.inner.write_vectored_at(bufs, offset)
     }
 
     #[inline]
@@ -102,6 +112,13 @@ where
         }
         ret
     }
+
+    #[inline]
+    fn read_vectored(&mut self, bufs: &mut [io::IoSliceMut<'_>]) -> io::Result<usize> {
+        let read = self.inner.read_vectored_at(bufs, self.offset)?;
+        self.offset += read as u64;
+        Ok(read)
+    }
 }
 
 impl<T> io::Write for Adapter<T>
@@ -122,6 +139,13 @@ where
             self.offset += buf.len() as u64;
         }
         ret
+    }
+
+    #[inline]
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        let written = self.inner.write_vectored_at(bufs, self.offset)?;
+        self.offset += written as u64;
+        Ok(written)
     }
 
     #[inline]

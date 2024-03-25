@@ -118,6 +118,19 @@ pub trait ReadAt {
             Err(fill_buffer_error())
         }
     }
+
+    /// Like `read_at`, except that it reads into a slice of buffers.
+    ///
+    /// Data is copied to fill each buffer in order, with the final buffer
+    /// written to possibly being only partially filled. This method must behave
+    /// equivalently to a single call to read with concatenated buffers.
+    fn read_vectored_at(&self, bufs: &mut [io::IoSliceMut<'_>], offset: u64) -> io::Result<usize> {
+        let buf = bufs
+            .iter_mut()
+            .find(|b| !b.is_empty())
+            .map_or(&mut [][..], |b| &mut **b);
+        self.read_at(buf, offset)
+    }
 }
 
 impl ReadAt for [u8] {
@@ -157,6 +170,11 @@ impl<const N: usize> ReadAt for [u8; N] {
     fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
         self.as_ref().read_exact_at(buf, offset)
     }
+
+    #[inline]
+    fn read_vectored_at(&self, bufs: &mut [io::IoSliceMut<'_>], offset: u64) -> io::Result<usize> {
+        self.as_ref().read_vectored_at(bufs, offset)
+    }
 }
 
 impl ReadAt for Vec<u8> {
@@ -169,6 +187,11 @@ impl ReadAt for Vec<u8> {
     fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
         (**self).read_exact_at(buf, offset)
     }
+
+    #[inline]
+    fn read_vectored_at(&self, bufs: &mut [io::IoSliceMut<'_>], offset: u64) -> io::Result<usize> {
+        (**self).read_vectored_at(bufs, offset)
+    }
 }
 
 impl ReadAt for std::borrow::Cow<'_, [u8]> {
@@ -180,6 +203,11 @@ impl ReadAt for std::borrow::Cow<'_, [u8]> {
     #[inline]
     fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
         (**self).read_exact_at(buf, offset)
+    }
+
+    #[inline]
+    fn read_vectored_at(&self, bufs: &mut [io::IoSliceMut<'_>], offset: u64) -> io::Result<usize> {
+        (**self).read_vectored_at(bufs, offset)
     }
 }
 
@@ -196,6 +224,11 @@ where
     fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
         (**self).read_exact_at(buf, offset)
     }
+
+    #[inline]
+    fn read_vectored_at(&self, bufs: &mut [io::IoSliceMut<'_>], offset: u64) -> io::Result<usize> {
+        (**self).read_vectored_at(bufs, offset)
+    }
 }
 
 impl<R> ReadAt for Box<R>
@@ -210,6 +243,11 @@ where
     #[inline]
     fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
         (**self).read_exact_at(buf, offset)
+    }
+
+    #[inline]
+    fn read_vectored_at(&self, bufs: &mut [io::IoSliceMut<'_>], offset: u64) -> io::Result<usize> {
+        (**self).read_vectored_at(bufs, offset)
     }
 }
 
@@ -226,6 +264,11 @@ where
     fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
         (**self).read_exact_at(buf, offset)
     }
+
+    #[inline]
+    fn read_vectored_at(&self, bufs: &mut [io::IoSliceMut<'_>], offset: u64) -> io::Result<usize> {
+        (**self).read_vectored_at(bufs, offset)
+    }
 }
 
 impl<R> ReadAt for std::rc::Rc<R>
@@ -240,6 +283,11 @@ where
     #[inline]
     fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
         (**self).read_exact_at(buf, offset)
+    }
+
+    #[inline]
+    fn read_vectored_at(&self, bufs: &mut [io::IoSliceMut<'_>], offset: u64) -> io::Result<usize> {
+        (**self).read_vectored_at(bufs, offset)
     }
 }
 
@@ -256,6 +304,11 @@ where
     fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
         self.get_ref().as_ref().read_exact_at(buf, offset)
     }
+
+    #[inline]
+    fn read_vectored_at(&self, bufs: &mut [io::IoSliceMut<'_>], offset: u64) -> io::Result<usize> {
+        self.get_ref().as_ref().read_vectored_at(bufs, offset)
+    }
 }
 
 impl ReadAt for io::Empty {
@@ -271,6 +324,11 @@ impl ReadAt for io::Empty {
         } else {
             Err(fill_buffer_error())
         }
+    }
+
+    #[inline]
+    fn read_vectored_at(&self, _: &mut [io::IoSliceMut<'_>], _: u64) -> io::Result<usize> {
+        Ok(0)
     }
 }
 
@@ -310,6 +368,19 @@ pub trait WriteAt {
         Ok(())
     }
 
+    /// Like `write_at`, except that it writes from a slice of buffers.
+    ///
+    /// Data is copied from each buffer in order, with the final buffer read
+    /// from possibly being only partially consumed. This method must behave as
+    /// a call to `write_at` with the buffers concatenated would.
+    fn write_vectored_at(&self, bufs: &[io::IoSlice<'_>], offset: u64) -> io::Result<usize> {
+        let buf = bufs
+            .iter()
+            .find(|b| !b.is_empty())
+            .map_or(&[][..], |b| &**b);
+        self.write_at(buf, offset)
+    }
+
     /// Flush this output stream, ensuring that all intermediately buffered
     /// contents reach their destination.
     ///
@@ -338,6 +409,11 @@ where
     }
 
     #[inline]
+    fn write_vectored_at(&self, bufs: &[io::IoSlice<'_>], offset: u64) -> io::Result<usize> {
+        (**self).write_vectored_at(bufs, offset)
+    }
+
+    #[inline]
     fn flush(&self) -> io::Result<()> {
         (**self).flush()
     }
@@ -355,6 +431,11 @@ where
     #[inline]
     fn write_all_at(&self, buf: &[u8], offset: u64) -> io::Result<()> {
         (**self).write_all_at(buf, offset)
+    }
+
+    #[inline]
+    fn write_vectored_at(&self, bufs: &[io::IoSlice<'_>], offset: u64) -> io::Result<usize> {
+        (**self).write_vectored_at(bufs, offset)
     }
 
     #[inline]
@@ -378,6 +459,11 @@ where
     }
 
     #[inline]
+    fn write_vectored_at(&self, bufs: &[io::IoSlice<'_>], offset: u64) -> io::Result<usize> {
+        (**self).write_vectored_at(bufs, offset)
+    }
+
+    #[inline]
     fn flush(&self) -> io::Result<()> {
         (**self).flush()
     }
@@ -398,6 +484,11 @@ where
     }
 
     #[inline]
+    fn write_vectored_at(&self, bufs: &[io::IoSlice<'_>], offset: u64) -> io::Result<usize> {
+        (**self).write_vectored_at(bufs, offset)
+    }
+
+    #[inline]
     fn flush(&self) -> io::Result<()> {
         (**self).flush()
     }
@@ -412,6 +503,11 @@ impl WriteAt for io::Sink {
     #[inline]
     fn write_all_at(&self, _buf: &[u8], _offset: u64) -> io::Result<()> {
         Ok(())
+    }
+
+    #[inline]
+    fn write_vectored_at(&self, bufs: &[io::IoSlice<'_>], _offset: u64) -> io::Result<usize> {
+        Ok(bufs.iter().map(|b| b.len()).sum())
     }
 }
 
