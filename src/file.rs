@@ -11,7 +11,7 @@ use std::{
 
 #[cfg(unix)]
 use std::os::unix::prelude::*;
-#[cfg(target_os = "wasi")]
+#[cfg(any(target_os = "wasi", target_os = "wasip1"))]
 use std::os::wasi::prelude::*;
 #[cfg(target_os = "windows")]
 use std::os::windows::prelude::*;
@@ -20,7 +20,7 @@ use crate::Adapter;
 
 use super::{ReadAt, WriteAt};
 
-#[cfg(target_os = "wasi")]
+#[cfg(any(target_os = "wasi", target_os = "wasip1"))]
 trait FileExt {
     fn read_at(&self, buffer: &mut [u8], offset: u64) -> io::Result<usize>;
 
@@ -31,7 +31,7 @@ trait FileExt {
     fn write_vectored_at(&self, bufs: &[io::IoSlice<'_>], offset: u64) -> io::Result<usize>;
 }
 
-#[cfg(target_os = "wasi")]
+#[cfg(any(target_os = "wasi", target_os = "wasip1"))]
 impl FileExt for File {
     fn read_at(&self, buffer: &mut [u8], offset: u64) -> io::Result<usize> {
         unsafe {
@@ -235,7 +235,7 @@ impl ReadAt for RandomAccessFile {
         file.read_exact(buf)
     }
 
-    #[cfg(target_os = "wasi")]
+    #[cfg(any(target_os = "wasi", target_os = "wasip1"))]
     #[inline]
     fn read_vectored_at(&self, bufs: &mut [io::IoSliceMut<'_>], offset: u64) -> io::Result<usize> {
         self.0.read_vectored_at(bufs, offset)
@@ -287,7 +287,7 @@ impl WriteAt for RandomAccessFile {
         file.write_all(buf)
     }
 
-    #[cfg(target_os = "wasi")]
+    #[cfg(any(target_os = "wasi", target_os = "wasip1"))]
     #[inline]
     fn write_vectored_at(&self, bufs: &[io::IoSlice<'_>], offset: u64) -> io::Result<usize> {
         self.0.write_vectored_at(bufs, offset)
