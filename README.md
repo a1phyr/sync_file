@@ -20,7 +20,7 @@ use std::io::Read;
 use sync_file::SyncFile;
 
 /// Reads a file byte by byte.
-/// Don't do this in real code !
+/// Don't do this in real code!
 fn read_all<R: Read>(mut file: R) -> std::io::Result<Vec<u8>> {
     let mut result = Vec::new();
     let mut buf = [0];
