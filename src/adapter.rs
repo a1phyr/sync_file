@@ -164,11 +164,7 @@ where
         self.offset = match pos {
             io::SeekFrom::Start(p) => p,
             io::SeekFrom::Current(p) => {
-                let (offset, overflowed) = self.offset.overflowing_add(p as u64);
-                if overflowed ^ (p < 0) {
-                    return Err(invalid_seek());
-                }
-                offset
+                self.offset.checked_add_signed(p).ok_or_else(invalid_seek)?
             }
             io::SeekFrom::End(_) => return Err(unsupported()),
         };
