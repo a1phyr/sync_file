@@ -363,7 +363,7 @@ impl AsHandle for RandomAccessFile {
 impl FromRawFd for RandomAccessFile {
     #[inline]
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
-        Self::from(File::from_raw_fd(fd))
+        unsafe { Self::from(File::from_raw_fd(fd)) }
     }
 }
 
@@ -630,7 +630,7 @@ impl AsHandle for SyncFile {
 impl FromRawFd for SyncFile {
     #[inline]
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
-        Self::from(File::from_raw_fd(fd))
+        unsafe { Self::from(File::from_raw_fd(fd)) }
     }
 }
 

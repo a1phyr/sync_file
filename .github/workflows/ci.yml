@@ -10,7 +10,7 @@ jobs:
       matrix:
         rust:
           - stable
-          - 1.63
+          - 1.85
         target:
           - ubuntu-latest
           - windows-latest
@@ -28,12 +28,13 @@ jobs:
     strategy:
       matrix:
         rust:
-          - 1.63
+          - 1.85
           - stable
 
     steps:
       - uses: actions/checkout@v4
 
-      - run: rustup toolchain add ${{ matrix.rust }} && rustup +${{ matrix.rust }} target add wasm32-wasi
+      - run: rustup toolchain add ${{ matrix.rust }} && rustup default ${{ matrix.rust }}
+      - run: rustup target add wasm32-wasip1
 
-      - run: cargo +${{ matrix.rust }} check --target wasm32-wasi
+      - run: cargo check --target wasm32-wasip1
