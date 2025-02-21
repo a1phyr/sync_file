@@ -93,6 +93,16 @@ where
     }
 }
 
+impl<T> crate::Size for Adapter<T>
+where
+    T: crate::Size + ?Sized,
+{
+    #[inline]
+    fn size(&self) -> io::Result<u64> {
+        self.inner.size()
+    }
+}
+
 impl<T> io::Read for Adapter<T>
 where
     T: ReadAt + ?Sized,

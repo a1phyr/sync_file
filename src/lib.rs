@@ -510,6 +510,85 @@ impl WriteAt for io::Sink {
     }
 }
 
+/// The `Size` trait allows for getting the size of a stream.
+pub trait Size {
+    /// Returns the size of the stream.
+    fn size(&self) -> io::Result<u64>;
+}
+
+impl Size for [u8] {
+    #[inline]
+    fn size(&self) -> io::Result<u64> {
+        Ok(self.len() as u64)
+    }
+}
+
+impl<const N: usize> Size for [u8; N] {
+    #[inline]
+    fn size(&self) -> io::Result<u64> {
+        Ok(self.len() as u64)
+    }
+}
+
+impl Size for Vec<u8> {
+    #[inline]
+    fn size(&self) -> io::Result<u64> {
+        Ok(self.len() as u64)
+    }
+}
+
+impl Size for std::borrow::Cow<'_, [u8]> {
+    #[inline]
+    fn size(&self) -> io::Result<u64> {
+        Ok(self.len() as u64)
+    }
+}
+
+impl<T> Size for io::Cursor<T>
+where
+    T: AsRef<[u8]>,
+{
+    #[inline]
+    fn size(&self) -> io::Result<u64> {
+        Ok(self.get_ref().as_ref().len() as u64)
+    }
+}
+
+impl<T: Size + ?Sized> Size for &'_ T {
+    #[inline]
+    fn size(&self) -> io::Result<u64> {
+        (**self).size()
+    }
+}
+
+impl<T: Size + ?Sized> Size for Box<T> {
+    #[inline]
+    fn size(&self) -> io::Result<u64> {
+        (**self).size()
+    }
+}
+
+impl<T: Size + ?Sized> Size for std::sync::Arc<T> {
+    #[inline]
+    fn size(&self) -> io::Result<u64> {
+        (**self).size()
+    }
+}
+
+impl<T: Size + ?Sized> Size for std::rc::Rc<T> {
+    #[inline]
+    fn size(&self) -> io::Result<u64> {
+        (**self).size()
+    }
+}
+
+impl Size for io::Empty {
+    #[inline]
+    fn size(&self) -> io::Result<u64> {
+        Ok(0)
+    }
+}
+
 #[cold]
 fn fill_buffer_error() -> io::Error {
     io::Error::new(io::ErrorKind::UnexpectedEof, "failed to fill whole buffer")

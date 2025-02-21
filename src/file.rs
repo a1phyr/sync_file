@@ -361,6 +361,12 @@ impl WriteAt for RandomAccessFile {
     }
 }
 
+impl crate::Size for RandomAccessFile {
+    fn size(&self) -> io::Result<u64> {
+        self.with_file(|f| f.metadata().map(|m| m.len()))
+    }
+}
+
 impl From<File> for RandomAccessFile {
     /// Creates a new `RandomAccessFile` from an open [`File`].
     #[inline]
@@ -562,6 +568,13 @@ impl WriteAt for SyncFile {
     #[inline]
     fn flush(&self) -> io::Result<()> {
         self.0.flush()
+    }
+}
+
+impl crate::Size for SyncFile {
+    #[inline]
+    fn size(&self) -> io::Result<u64> {
+        self.0.size()
     }
 }
 
