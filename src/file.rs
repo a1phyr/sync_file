@@ -427,7 +427,7 @@ impl FromRawFd for RandomAccessFile {
 impl FromRawHandle for RandomAccessFile {
     #[inline]
     unsafe fn from_raw_handle(handle: RawHandle) -> Self {
-        Self::from(File::from_raw_handle(handle))
+        unsafe { Self::from(File::from_raw_handle(handle)) }
     }
 }
 
@@ -694,7 +694,7 @@ impl FromRawFd for SyncFile {
 impl FromRawHandle for SyncFile {
     #[inline]
     unsafe fn from_raw_handle(handle: RawHandle) -> Self {
-        Self::from(File::from_raw_handle(handle))
+        unsafe { Self::from(File::from_raw_handle(handle)) }
     }
 }
 
