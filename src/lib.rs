@@ -54,9 +54,8 @@
 //!
 //! # OS support
 //!
-//! Windows and Unix targets provide extensions for positional I/O, so on these
-//! targets `SyncFile` is zero-cost. Wasi also provide these but only with a
-//! nightly compiler.
+//! Windows, Unix and `wasip1` targets provide extensions for positional I/O,
+//! so on these targets `SyncFile` is zero-cost.
 //!
 //! If platform-specific extensions are not available, `SyncFile` fallbacks to a
 //! mutex.
