@@ -166,9 +166,8 @@ where
 
 impl<T> io::Seek for Adapter<T>
 where
-    T: ?Sized,
+    T: crate::Size + ?Sized,
 {
-    /// Note: seeking to an offset relative to the end of a stream is unsupported.
     #[inline]
     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
         self.offset = match pos {
@@ -176,7 +175,11 @@ where
             io::SeekFrom::Current(p) => {
                 self.offset.checked_add_signed(p).ok_or_else(invalid_seek)?
             }
-            io::SeekFrom::End(_) => return Err(unsupported()),
+            io::SeekFrom::End(p) => self
+                .inner
+                .size()?
+                .checked_add_signed(p)
+                .ok_or_else(invalid_seek)?,
         };
 
         Ok(self.offset)
@@ -199,13 +202,5 @@ fn invalid_seek() -> io::Error {
     io::Error::new(
         io::ErrorKind::InvalidInput,
         "invalid seek to a negative or overflowing position",
-    )
-}
-
-#[cold]
-fn unsupported() -> io::Error {
-    io::Error::new(
-        io::ErrorKind::Unsupported,
-        "unsupported seek to end of stream",
     )
 }
