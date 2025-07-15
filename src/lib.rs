@@ -616,4 +616,16 @@ mod tests {
         assert_eq!(&buf[..2], b"ht");
         assert!(f.seek(io::SeekFrom::Current(-10)).is_err());
     }
+
+    #[test]
+    fn read_to_string() {
+        let mut f = SyncFile::open("LICENSE-APACHE").unwrap();
+
+        f.seek(io::SeekFrom::End(-54)).unwrap();
+        let mut buf = String::new();
+        f.read_to_string(&mut buf).unwrap();
+        assert_eq!(buf.len(), 54);
+        assert_eq!(buf.capacity(), 54);
+        assert!(buf.contains("limitations under the License."));
+    }
 }

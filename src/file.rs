@@ -20,7 +20,7 @@ use std::os::wasi::prelude::*;
 #[cfg(target_os = "windows")]
 use std::os::windows::prelude::*;
 
-use crate::Adapter;
+use crate::{Adapter, Size};
 
 use super::{ReadAt, WriteAt};
 
@@ -361,7 +361,7 @@ impl WriteAt for RandomAccessFile {
     }
 }
 
-impl crate::Size for RandomAccessFile {
+impl Size for RandomAccessFile {
     fn size(&self) -> io::Result<u64> {
         self.with_file(|f| f.metadata().map(|m| m.len()))
     }
@@ -571,7 +571,7 @@ impl WriteAt for SyncFile {
     }
 }
 
-impl crate::Size for SyncFile {
+impl Size for SyncFile {
     #[inline]
     fn size(&self) -> io::Result<u64> {
         self.0.size()
@@ -592,6 +592,28 @@ impl io::Read for SyncFile {
     #[inline]
     fn read_vectored(&mut self, bufs: &mut [io::IoSliceMut<'_>]) -> io::Result<usize> {
         self.0.read_vectored(bufs)
+    }
+
+    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
+        if let Ok(size) = self.size() {
+            if let Some(size) = size.checked_sub(self.offset()) {
+                let size = size.try_into().map_err(|_| io::ErrorKind::OutOfMemory)?;
+                buf.try_reserve(size)?;
+            }
+        }
+
+        self.0.read_to_end(buf)
+    }
+
+    fn read_to_string(&mut self, buf: &mut String) -> io::Result<usize> {
+        if let Ok(size) = self.size() {
+            if let Some(size) = size.checked_sub(self.offset()) {
+                let size = size.try_into().map_err(|_| io::ErrorKind::OutOfMemory)?;
+                buf.try_reserve(size)?;
+            }
+        }
+
+        self.0.read_to_string(buf)
     }
 }
 
