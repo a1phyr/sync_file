@@ -13,5 +13,5 @@ documentation = "https://docs.rs/sync_file"
 categories = ["concurrency", "filesystem"]
 keywords = ["file", "sync", "concurrency"]
 
-[target.'cfg(target_os = "wasi")'.dependencies]
-wasi = "0.11"
+[target.'cfg(all(target_os = "wasi", target_env = "p1"))'.dependencies]
+wasip1 = "1.0"

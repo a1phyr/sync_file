@@ -39,48 +39,48 @@ trait FileExt {
 impl FileExt for File {
     fn read_at(&self, buffer: &mut [u8], offset: u64) -> io::Result<usize> {
         unsafe {
-            let raw = self.as_raw_fd() as wasi::Fd;
+            let raw = self.as_raw_fd() as wasip1::Fd;
 
-            let iovec = [wasi::Iovec {
+            let iovec = [wasip1::Iovec {
                 buf: buffer.as_mut_ptr(),
                 buf_len: buffer.len(),
             }];
 
-            wasi::fd_pread(raw, &iovec, offset)
+            wasip1::fd_pread(raw, &iovec, offset)
                 .map_err(|err| io::Error::from_raw_os_error(err.raw() as _))
         }
     }
 
     fn read_vectored_at(&self, bufs: &mut [io::IoSliceMut<'_>], offset: u64) -> io::Result<usize> {
         unsafe {
-            let raw = self.as_raw_fd() as wasi::Fd;
+            let raw = self.as_raw_fd() as wasip1::Fd;
             let iovec = std::mem::transmute(bufs);
 
-            wasi::fd_pread(raw, iovec, offset)
+            wasip1::fd_pread(raw, iovec, offset)
                 .map_err(|err| io::Error::from_raw_os_error(err.raw() as _))
         }
     }
 
     fn write_at(&self, buffer: &[u8], offset: u64) -> io::Result<usize> {
         unsafe {
-            let raw = self.as_raw_fd() as wasi::Fd;
+            let raw = self.as_raw_fd() as wasip1::Fd;
 
-            let iovec = [wasi::Ciovec {
+            let iovec = [wasip1::Ciovec {
                 buf: buffer.as_ptr(),
                 buf_len: buffer.len(),
             }];
 
-            wasi::fd_pwrite(raw, &iovec, offset)
+            wasip1::fd_pwrite(raw, &iovec, offset)
                 .map_err(|err| io::Error::from_raw_os_error(err.raw() as _))
         }
     }
 
     fn write_vectored_at(&self, bufs: &[io::IoSlice<'_>], offset: u64) -> io::Result<usize> {
         unsafe {
-            let raw = self.as_raw_fd() as wasi::Fd;
+            let raw = self.as_raw_fd() as wasip1::Fd;
             let iovec = std::mem::transmute(bufs);
 
-            wasi::fd_pwrite(raw, iovec, offset)
+            wasip1::fd_pwrite(raw, iovec, offset)
                 .map_err(|err| io::Error::from_raw_os_error(err.raw() as _))
         }
     }
