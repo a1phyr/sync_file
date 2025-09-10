@@ -2,7 +2,6 @@
 
 [![Crates.io](https://img.shields.io/crates/v/sync_file.svg)](https://crates.io/crates/sync_file)
 [![Docs.rs](https://docs.rs/sync_file/badge.svg)](https://docs.rs/sync_file/)
-![Minimum rustc version](https://img.shields.io/badge/rustc-1.63+-lightgray.svg)
 
 Files that can be read concurrently.
 
