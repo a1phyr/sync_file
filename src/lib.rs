@@ -331,6 +331,24 @@ impl ReadAt for io::Empty {
     }
 }
 
+/// Reads from the underlying reader but bypasses the buffer
+impl<R: ReadAt> ReadAt for io::BufReader<R> {
+    #[inline]
+    fn read_at(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
+        self.get_ref().read_at(buf, offset)
+    }
+
+    #[inline]
+    fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
+        self.get_ref().read_exact_at(buf, offset)
+    }
+
+    #[inline]
+    fn read_vectored_at(&self, bufs: &mut [io::IoSliceMut<'_>], offset: u64) -> io::Result<usize> {
+        self.get_ref().read_vectored_at(bufs, offset)
+    }
+}
+
 /// The `WriteAt` trait allows for writing bytes to a source at a given offset.
 ///
 /// Additionally, the methods of this trait only require a shared reference,
@@ -586,6 +604,13 @@ impl Size for io::Empty {
     #[inline]
     fn size(&self) -> io::Result<u64> {
         Ok(0)
+    }
+}
+
+impl<R: Size> Size for io::BufReader<R> {
+    #[inline]
+    fn size(&self) -> io::Result<u64> {
+        self.get_ref().size()
     }
 }
 
