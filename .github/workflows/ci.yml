@@ -16,7 +16,7 @@ jobs:
           - windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - run: rustup toolchain add ${{ matrix.rust }}
 
@@ -32,7 +32,7 @@ jobs:
           - stable
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - run: rustup toolchain add ${{ matrix.rust }} && rustup default ${{ matrix.rust }}
       - run: rustup target add wasm32-wasip1 wasm32-wasip2
