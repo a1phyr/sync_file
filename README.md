@@ -10,7 +10,8 @@ conditions, because the OS has a single cursor which is advanced and used
 by several threads.
 
 `SyncFile` solves this problem by using platform-specific extensions to do
-positional I/O, so the cursor of the file is not shared.
+positional I/O (eg `pread` and `pwrite` on Unix systems), so the cursor of
+the file is not shared.
 
 ## Example
 
