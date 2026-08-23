@@ -64,9 +64,11 @@
 
 mod adapter;
 mod file;
+mod take_range;
 
 pub use adapter::Adapter;
 pub use file::{RandomAccessFile, SyncFile};
+pub use take_range::TakeRange;
 
 use std::{cmp::min, convert::TryInto, io};
 
@@ -532,6 +534,39 @@ impl WriteAt for io::Sink {
 pub trait Size {
     /// Returns the size of the stream.
     fn size(&self) -> io::Result<u64>;
+
+    /// Creates an adapter which only reads and write within the given range.
+    ///
+    /// The returned stream will "start" at `0` and therefore stops at
+    /// `range.end() - range.start()`.
+    ///
+    /// Attempts to use the adapter after the bound will return `Ok(0)`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use sync_file::*;
+    ///
+    /// let mut buf = [0; 10];
+    /// let string = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    /// let adapter = string.take_range(5..10);
+    ///
+    /// // Read within range
+    /// let n = adapter.read_at(&mut buf, 2)?;
+    /// assert_eq!(&buf[..n], b"HIJ");
+    ///
+    /// // Read out of range
+    /// let n = adapter.read_at(&mut buf, 7)?;
+    /// assert_eq!(n, 0);
+    ///
+    /// # Ok::<_, std::io::Error>(())
+    /// ```
+    fn take_range(self, range: impl std::ops::RangeBounds<u64>) -> TakeRange<Self>
+    where
+        Self: Sized,
+    {
+        TakeRange::new(self, range)
+    }
 }
 
 impl Size for [u8] {
